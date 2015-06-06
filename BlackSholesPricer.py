@@ -8,17 +8,23 @@ Created on Thu Feb 26 15:00:36 2015
 import numpy as np
 import scipy.stats as ss
 import time
-from math import math
+from math import sqrt
 
-#Black and Scholes
+# Black and Scholes
 
 
 def d1(S0, K, r, sigma, T):
-    return (np.log(S0/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
+    return (np.log(S0/K) + (r + sigma**2 * .5) * T) / (sigma * np.sqrt(T))
 
 
 def d2(S0, K, r, sigma, T):
-    return (np.log(S0/K) + (r - sigma**2 / 2) * T) / (sigma * np.sqrt(T))
+    return (np.log(S0/K) + (r - sigma**2 * .5) * T) / (sigma * np.sqrt(T))
+    
+def dplus(F, K, sigma, T):
+    return (np.log(F/K) + (sigma**2 * .5) * T) / (sigma * np.sqrt(T))
+
+def dminus(F, K, sigma, T):
+    return (np.log(F/K) - (sigma**2 * .5) * T) / (sigma * np.sqrt(T))
 
 
 def BlackScholes(Otype, S0, K, r, sigma, T):
@@ -27,8 +33,18 @@ def BlackScholes(Otype, S0, K, r, sigma, T):
     elif Otype == "P":
         return K * np.exp(-r * T) * ss.norm.cdf(-d2(S0, K, r, sigma, T)) - S0 * ss.norm.cdf(-d1(S0, K, r, sigma, T))
     else:
-        raise ValueError("only availalbe 'C' & 'P'")
+        raise ValueError("not Otype 'C' or 'P'")
         return ''
+        
+def BlackFormula(Otype, F, K, r, sigma, T):
+    if Otype == "C":
+        return np.exp(-r*T) * (F * ss.norm.cdf(dplus(F, K, sigma, T)) - K * ss.norm.cdf(dminus(F, K, sigma, T)))
+    elif Otype == "P":
+        return np.exp(-r*T) * (K * ss.norm.cdf(-dminus(F, K, sigma, T)) - F * ss.norm.cdf(-dplus(F, K, sigma, T)))
+    else:
+        raise ValueError("not Otype 'C' or 'P'")
+        return ''
+        
 
 
 def CalcImpliedVolatility(Otype, S0, K, r, T, price, eps, Vol):    
@@ -39,7 +55,23 @@ def CalcImpliedVolatility(Otype, S0, K, r, T, price, eps, Vol):
 
         td1 = d1(S0, K, r, Vol, T)
         NPrime = ((2*np.pi)**(-0.5))*np.exp(-0.5*(td1)**2)
-        vega = S0*np.exp(-r*T)*NPrime*np.sqrt(T)
+        vega = S0*NPrime*np.sqrt(T)
+        if vega == 0.0:
+            return np.nan
+            # raise ValueError("vega is zero, Otype: %s, K: %.2f, price: %.4f, Vol: %f"%(Otype,K,price,Vol))
+        Vol += (price-pricev) / vega
+    
+    return Vol
+    
+def CalcImpliedVolatility_Black(Otype, F, K, r, T, price, eps, Vol):
+    for i in xrange(5):
+        pricev = BlackFormula(Otype, F, K, r, Vol, T)
+        if abs(price-pricev) < eps:
+            break
+
+        td1 = dplus(F, K, Vol, T)
+        NPrime = ((2*np.pi)**(-0.5))*np.exp(-0.5*(td1)**2)
+        vega = S0*NPrime*np.sqrt(T)
         if vega == 0.0:
             return np.nan
             # raise ValueError("vega is zero, Otype: %s, K: %.2f, price: %.4f, Vol: %f"%(Otype,K,price,Vol))
@@ -77,8 +109,12 @@ def CalcExplicitImpliedInterestRate(callprice, putprice, futureprice, strike, T_
     K = strike
     T1 = T_option
     T2 = T_future
-    r = (F*T1 - K*T2 - T1*c + T1*p - T2*c + T2*p + sqrt(F**2*T1**2 - 2*F*K*T1*T2 - 2*F*T1**2*c + 2*F*T1**2*p + 2*F*T1*T2*c - 2*F*T1*T2*p + K**2*T2**2 - 2*K*T1*T2*c + 2*K*T1*T2*p + 2*K*T2**2*c - 2*K*T2**2*p + T1**2*c**2 - 2*T1**2*c*p + T1**2*p**2 - 2*T1*T2*c**2 + 4*T1*T2*c*p - 2*T1*T2*p**2 + T2**2*c**2 - 2*T2**2*c*p + T2**2*p**2))/(2*T1*T2*(c - p))
-    return r
+    if not(callprice - putprice):
+        r = (F*T1 - K*T2 - T1*c + T1*p - T2*c + T2*p + sqrt(F**2*T1**2 - 2*F*K*T1*T2 - 2*F*T1**2*c + 2*F*T1**2*p + 2*F*T1*T2*c - 2*F*T1*T2*p + K**2*T2**2 - 2*K*T1*T2*c + 2*K*T1*T2*p + 2*K*T2**2*c - 2*K*T2**2*p + T1**2*c**2 - 2*T1**2*c*p + T1**2*p**2 - 2*T1*T2*c**2 + 4*T1*T2*c*p - 2*T1*T2*p**2 + T2**2*c**2 - 2*T2**2*c*p + T2**2*p**2))/(2*T1*T2*(c - p))
+        return r
+    else:
+        r = (K - F) / (F * T1 - K * T2)
+        return r
     pass
     
         
@@ -102,22 +138,22 @@ class optionGreek:
             raise ValueError("only availalbe 'C' & 'P'")
             return
         
-        td1=d1(self.S0, self.K, self.r, self.sigma, self.T)
-        td2=d2(self.S0, self.K, self.r, self.sigma, self.T)
-        NPrime=((2*np.pi)**(-1/2))*np.exp(-0.5*(td1)**2)
+        td1 = d1(self.S0, self.K, self.r, self.sigma, self.T)
+        td2 = d2(self.S0, self.K, self.r, self.sigma, self.T)
+        NPrime = ((2*np.pi)**(-1/2))*np.exp(-0.5*(td1)**2)
         
         if self.OptionType == 'C':
-            self.price=S0 * ss.norm.cdf(td1) - K * np.exp(-r * T) * ss.norm.cdf(td2)
-            self.delta=ss.norm.cdf(td1)
-            self.theta=(NPrime)*(-S0*sigma*0.5/np.sqrt(T))-r*K * np.exp(-r * T) * ss.norm.cdf(td2)
+            self.price = S0 * ss.norm.cdf(td1) - K * np.exp(-r * T) * ss.norm.cdf(td2)
+            self.delta = ss.norm.cdf(td1)
+            self.theta = (NPrime)*(-S0*sigma*0.5/np.sqrt(T))-r*K * np.exp(-r * T) * ss.norm.cdf(td2)
         elif self.OptionType == 'P':
-            self.price=K * np.exp(-r * T) * ss.norm.cdf(-td2) - S0 * ss.norm.cdf(-td1)
-            self.delta=ss.norm.cdf(td1)-1
-            self.theta=(NPrime)*(-S0*sigma*0.5/np.sqrt(T))+r*K * np.exp(-r * T) * ss.norm.cdf(-td2)
+            self.price = K * np.exp(-r * T) * ss.norm.cdf(-td2) - S0 * ss.norm.cdf(-td1)
+            self.delta = ss.norm.cdf(td1)-1
+            self.theta = (NPrime)*(-S0*sigma*0.5/np.sqrt(T))+r*K * np.exp(-r * T) * ss.norm.cdf(-td2)
             
         
-        self.gamma=(NPrime/(S0*sigma*T**(0.5)))
-        self.vega = S0*np.exp(-r*T)*NPrime*np.sqrt(T)
+        self.gamma = (NPrime/(S0*sigma*T**(0.5)))
+        self.vega = S0*NPrime*np.sqrt(T)
             
 
         
@@ -134,7 +170,7 @@ if __name__ == '__main__':
     t = time.time()
     r_high = 0.000009
     r_low = 0.000005
-    r = CalcImpliedInterestRate(S0, K, r_low, r_high, T, 1.995, 2.015,0.000000001,0.0017)
+    r = CalcImpliedInterestRate(S0, K, r_low, r_high, T, 1.995, 2.015, 0.000000001, 0.0017)
     elapsed = time.time()-t
     print "Option\tBlack-Scholes ImR:", r
     print "Elapsed:", elapsed
@@ -156,7 +192,7 @@ if __name__ == '__main__':
     
     print '-' * 20
     t=time.time()
-    #c_BS = BlackScholes(Otype,S0, K, r, sigma, T)
+    # c_BS = BlackScholes(Otype,S0, K, r, sigma, T)
     option.BlackScholesGreek()
     elapsed = time.time()-t
     print "Option\tBlack-Scholes price:", option.price
