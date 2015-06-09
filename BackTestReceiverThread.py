@@ -13,7 +13,7 @@ from PyQt4 import QtCore
 from SubscribeReceiverThread import SubscribeThread
 from OptionViewer_date import getoptionbusdayttm, getfuturebusdayttm, getoneyearday
 
-sys.path.append('C:/Python/BlackSholesPricer')
+# sys.path.append('C:/Python/BlackSholesPricer')
 import BlackSholesPricer as pricer
 
 
@@ -45,47 +45,43 @@ class BackTestReceiverThread(SubscribeThread):
     def onReceiveData(self, row):
         if type(row) != dict:
             return
-
+        # item = [row['Time'], row['TAQ'],row['ShortCD'], row['Ask1'], row['Bid1']]
+        # print item
         self.updatetaqtime(row['Time'])
+        self.updatesnapshotdata(row)
 
+        print self.df_quote
 
-        if float(row['Ask1']) and float(row['Bid1']):
-            item = [row['Time'], row['ShortCD'], row['Ask1'], row['Bid1']]
-            if not row['ShortCD'] in list(self.df_quote['ShortCD']):
-                self.df_quote.loc[len(self.df_quote)] = item
-            else:
-                index = self.df_quote[self.df_quote['ShortCD'] == row['ShortCD']].index[0]
-                self.df_quote.ix[index] = item
-            self.df_quote = self.df_quote.sort('ShortCD')
-            # self.df_mid = self.df_mid[abs(self.df_mid['Ask1'].astype(float) - self.df_mid['Bid1'].astype(float)) < 0.3]
-            # print self.df_mid
-            if not self.updateatm(): return
+        # self.df_quote = self.df_quote.sort('ShortCD')
+        # self.df_mid = self.df_mid[abs(self.df_mid['Ask1'].astype(float) - self.df_mid['Bid1'].astype(float)) < 0.3]
+        # print self.df_mid
+        # if not self.updateatm(): return
 
-            F = self.call_atm_midprc - self.put_atm_midprc + self.atm_strike
-            S0 = F * np.exp(-self.r * self.T_option)
-            K = float(row['ShortCD'][-3:])
-            if K % 5: K += 0.5
-            optiontype = ''
-            if row['ShortCD'][0] == '2': optiontype = 'C'
-            elif row['ShortCD'][0] == '3': optiontype = 'P'
-            else:
-                return
+        # F = self.call_atm_midprc - self.put_atm_midprc + self.atm_strike
+        # S0 = F * np.exp(-self.r * self.T_option)
+        # K = float(row['ShortCD'][-3:])
+        # if K % 5: K += 0.5
+        # optiontype = ''
+        # if row['ShortCD'][0] == '2': optiontype = 'C'
+        # elif row['ShortCD'][0] == '3': optiontype = 'P'
+        # else:
+        #     return
+        #
+        # midprice = (float(row['Ask1']) + float(row['Bid1'])) * 0.5
+        # Vol = 0.0017
+        # bid1 = float(row['Bid1'])
+        # ask1 = float(row['Ask1'])
+        # # imvol = pricer.CalcImpliedVolatility(OptionType, S0, K, self.r, self.T_option, midprice, 0.000001, Vol)
+        # imvol_bid1 = pricer.CalcImpliedVolatility(optiontype, S0, K, self.r, self.T_option, bid1, 0.000001, Vol)
+        # imvol_ask1 = pricer.CalcImpliedVolatility(optiontype, S0, K, self.r, self.T_option, ask1, 0.000001, Vol)
+        # incre = -0.0001
+        # count = 0
 
-            midprice = (float(row['Ask1']) + float(row['Bid1'])) * 0.5
-            Vol = 0.0017
-            bid1 = float(row['Bid1'])
-            ask1 = float(row['Ask1'])
-            # imvol = pricer.CalcImpliedVolatility(OptionType, S0, K, self.r, self.T_option, midprice, 0.000001, Vol)
-            imvol_bid1 = pricer.CalcImpliedVolatility(optiontype, S0, K, self.r, self.T_option, bid1, 0.000001, Vol)
-            imvol_ask1 = pricer.CalcImpliedVolatility(optiontype, S0, K, self.r, self.T_option, ask1, 0.000001, Vol)
-            incre = -0.0001
-            count = 0
-
-            # imvol = '%.6f'% (imvol * np.sqrt(self.T_oneyear))
-            imvol_bid1 = '%.6f'% (imvol_bid1 * np.sqrt(self.T_oneyear))
-            imvol_ask1 = '%.6f'% (imvol_ask1 * np.sqrt(self.T_oneyear))
-            item = [row['Time'], row['ShortCD'], str(K), row['Ask1'], row['Bid1'], imvol_ask1, imvol_bid1]
-            print item
+        # imvol = '%.6f'% (imvol * np.sqrt(self.T_oneyear))
+        # imvol_bid1 = '%.6f'% (imvol_bid1 * np.sqrt(self.T_oneyear))
+        # imvol_ask1 = '%.6f'% (imvol_ask1 * np.sqrt(self.T_oneyear))
+        # item = [row['Time'], row['ShortCD'], str(K), row['Ask1'], row['Bid1'], imvol_ask1, imvol_bid1]
+        # print item
         pass
 
     def updatetaqtime(self, strtime):
@@ -94,6 +90,7 @@ class BackTestReceiverThread(SubscribeThread):
 
     def updatesnapshotdata(self, row):
         if row['TAQ'] != 'Q': return
+        # if row['Ask1'] == None or row['Bid1'] == None: return
         item = [row['Time'], row['ShortCD'], row['Ask1'], row['Bid1']]
         if not row['ShortCD'] in list(self.df_quote['ShortCD']):
             self.df_quote.loc[len(self.df_quote)] = item
